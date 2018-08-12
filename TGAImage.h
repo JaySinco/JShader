@@ -75,6 +75,12 @@ struct TGAColor
 };
 
 
+const TGAColor white = TGAColor(255, 255, 255);
+const TGAColor red = TGAColor(255, 0, 0);
+const TGAColor green = TGAColor(0, 255, 0);
+const TGAColor blue = TGAColor(0, 0, 255);
+const TGAColor black = TGAColor(0, 0, 0);
+
 inline std::ostream &operator<<(std::ostream &out, const TGAColor &c)
 {
 	switch (c.bytespp)
@@ -180,7 +186,7 @@ public:
 			load_rle_data(in);
 		else
 			assert(!(std::cerr << "unknown file format " << (int)header.ImageTyp << "\n"));
-		if (!(header.ImgDesc & 0x20)) {
+		if (header.ImgDesc & 0x20) {
 			flip_vertically();
 		}
 		if (header.ImgDesc & 0x10) {

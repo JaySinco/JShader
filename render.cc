@@ -6,11 +6,8 @@
 #include "model.h"
 #include "geometry.h"
 
-const int width = 800, height = 800;
-const TGAColor white = TGAColor(255, 255, 255);
-const TGAColor red = TGAColor(255, 0, 0);
-const TGAColor green = TGAColor(0, 255, 0);
-const TGAColor blue = TGAColor(0, 0, 255);
+TGAFormat format = TGAFormat::RGB;
+const int width = 1000, height = 1000;
 
 void draw_line(Vec2i v1, Vec2i v2, TGAImage &image, TGAColor color)
 {
@@ -39,7 +36,9 @@ void draw_line(Vec2i v1, Vec2i v2, TGAImage &image, TGAColor color)
 	}
 }
 
-void draw_triangle(Vec3f v1, Vec3f v2, Vec3f v3, float *bufferz, TGAImage &image, TGAColor color)
+
+void draw_triangle(Vec3f v1, Vec3f v2, Vec3f v3, Vec3f vt1, Vec3f vt2, Vec3f vt3,
+	float *bufferz, float intensity, TGAImage &image, TGAImage &texture)
 {
 	if (v1.y == v2.y && v1.y == v3.y) return;
 	if (v1.y > v2.y) std::swap(v1, v2);
@@ -57,11 +56,21 @@ void draw_triangle(Vec3f v1, Vec3f v2, Vec3f v3, float *bufferz, TGAImage &image
 		if (A.x > B.x) std::swap(A, B);
 		for (auto j = int(A.x); j <= int(B.x); ++j) {
 			float z = (j - A.x) * (B.z - A.z) / (B.x - A.x) + A.z;
-			int idx = int(j + (v1.y + i) * width);
+			int x = j;
+			int y = int(v1.y + i);
+			int idx = x + y * width;
 			if (z >= bufferz[idx]) 
 			{
 				bufferz[idx] = z;
-				image.set(j, int(v1.y) + i, color);
+				float x1 = v1.x, x2 = v2.x, x3 = v3.x, y1 = v1.y, y2 = v2.y, y3 = v3.y;
+				float u = (x*(y3 - y1) + x1 * (y - y3) + x3 * (y1 - y)) / (x1*(y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
+			    float v = (-x * y1 + x * y2 + x1 * y - x1 * y2 - x2 * y + x2 * y1) / (-x1 * y2 + x1 * y3 + x2 * y1 - x2 * y3 - x3 * y1 + x3 * y2);
+				float vtx = (1 - u - v) * vt1.x + u * vt2.x + v * vt3.x;
+				float vty = (1 - u - v) * vt1.y + u * vt2.y + v * vt3.y;
+				if (vtx >= 0 && vtx < 1 && vty >= 0 && vty < 1)
+					image.set(x, y, texture.get(int(vtx * texture.get_width()), int(vty * texture.get_height())) * intensity);
+				else
+					image.set(x, y, black);
 			}
 		}
 	}
@@ -69,15 +78,19 @@ void draw_triangle(Vec3f v1, Vec3f v2, Vec3f v3, float *bufferz, TGAImage &image
 
 
 Vec3f world2screen(Vec3f v) {
-	auto x = int((v.x + 1.) * width / 2 + .5);
-	auto y = int((v.y + 1.) * height / 2. + .5);
+	auto x = int((v.x + 1.) * width / 2. );
+	auto y = int((v.y + 1.) * height / 2.);
 	return Vec3f(float(x), float(y), v.z);
 }
 
+
 int main(int argc, char *argv[])
 {
-	auto image = TGAImage(width, height, TGAFormat::GRAYSCALE);
+	
+	TGAImage image(width, height, format);
+	TGAImage texture("african_head_diffuse.tga");
 	ObjModel model("african_head.obj");
+
 	Vec3f light_dir(0, 0, -1);
 	float *bufferz = new float[width*height];
 	std::fill(bufferz, bufferz+width*height, -1 * std::numeric_limits<float>::max());
@@ -90,15 +103,14 @@ int main(int argc, char *argv[])
 		Vec3f n = (face[2].v - face[0].v) ^ (face[1].v - face[0].v);
 		n.normalize();
 		float intensity = n * light_dir;
-		if (intensity >= 0)
-		{
-			auto gray = unsigned char(intensity * 255);
-			draw_triangle(pv[0], pv[1], pv[2], bufferz, image, TGAColor(gray));
-		}
-	}
+		draw_triangle(pv[0], pv[1], pv[2], face[0].vt, face[1].vt, face[2].vt,
+			bufferz, std::abs(intensity), image, texture);
 
-	image.to_file("output.tga");
+	}
+	std::string out_file("output.tga");
+	image.to_file(out_file);
 	delete[] bufferz;
-	std::cout << "done!" << std::endl;
+	assert(std::cerr << "done! rendered into \"" << out_file << "\"(" << width << "x" << height
+		<< "/" << format << ")" << std::endl);
 	getchar();
 }
