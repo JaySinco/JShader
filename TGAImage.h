@@ -27,6 +27,16 @@ enum TGAFormat {
 	GRAYSCALE = 1, RGB = 3, RGBA = 4
 };
 
+std::ostream &operator<<(std::ostream &out, TGAFormat& tf) {
+	switch (tf) {
+		case GRAYSCALE: out << "GRAYSCALE"; break;
+		case RGB:       out << "RGB"; break;
+		case RGBA:      out << "RGBA"; break;
+		default:        out << "UNKNOW"; break;
+	}
+	return out;
+}
+
 struct TGAColor
 {
 	union {
@@ -54,7 +64,16 @@ struct TGAColor
 		r(R), g(G), b(B), a(A), bytespp(TGAFormat::RGBA) {}
 
 	TGAColor(int v, TGAFormat bpp) : val(v), bytespp(bpp) {}
+
+	TGAColor operator*(float rate) const
+	{
+		TGAColor temp = *this;
+		for (auto &i : temp.raw)
+			i = unsigned char(i*rate);
+		return temp;
+	}
 };
+
 
 inline std::ostream &operator<<(std::ostream &out, const TGAColor &c)
 {
@@ -89,6 +108,11 @@ public:
 		memset(data, 0, sz);
 	};
 
+	TGAImage(const std::string &filename) :data(nullptr)
+	{
+		from_file(filename);
+	}
+
 	TGAImage(const TGAImage &rhs) : width(rhs.width), height(rhs.height), bytespp(rhs.bytespp)
 	{
 		size_t sz = width * height * bytespp;
@@ -122,9 +146,11 @@ public:
 
 	TGAColor get(int x, int y) const 
 	{
-		assert(data && x >= 0 && y >= 0 && x < width && y < height);
 		TGAColor c(bytespp);
-		std::memcpy(&c.val, data + (x + y * width)*bytespp, bytespp);
+		if (data && x >= 0 && y >= 0 && x < width && y < height)
+			std::memcpy(&c.val, data + (x + y * width)*bytespp, bytespp);
+		else
+			std::cerr << "illege access: " << x << ", " << y << "\n";
 		return c;
 	}
 
@@ -133,6 +159,37 @@ public:
 		assert(c.bytespp == bytespp);
 		if(!(data && x >= 0 && y >= 0 && x < width && y < height)) return;
 		std::memcpy(data + (x + y * width)*bytespp, &c.val, bytespp);
+	}
+
+	void from_file(const std::string &filename) {
+		if (data) delete[] data;
+		data = NULL;
+		std::ifstream in(filename, std::ios::binary);
+		assert(in.is_open());
+		TGAHeader header;
+		in.read((char *)&header, sizeof(header));
+		width = header.Width;
+		height = header.Height;
+		bytespp = TGAFormat(header.PixelDepth >> 3);
+		assert(width > 0 && height > 0 && (bytespp == GRAYSCALE || bytespp == RGB || bytespp == RGBA));
+		unsigned long nbytes = bytespp * width * height;
+		data = new unsigned char[nbytes];
+		if (3 == header.ImageTyp || 2 == header.ImageTyp)
+			in.read((char *)data, nbytes);
+		else if (10 == header.ImageTyp || 11 == header.ImageTyp)
+			load_rle_data(in);
+		else
+			assert(!(std::cerr << "unknown file format " << (int)header.ImageTyp << "\n"));
+		if (!(header.ImgDesc & 0x20)) {
+			flip_vertically();
+		}
+		if (header.ImgDesc & 0x10) {
+			flip_horizontally();
+		}
+		assert(in.good());
+		assert(std::cerr << "image loaded from \"" << filename <<  "\"("
+			<< width << "x" << height << "/" << bytespp << ")\n");
+		in.close();
 	}
 
 	void to_file(const std::string &filename, bool rle=true)
@@ -208,6 +265,50 @@ private:
 			out.put(raw ? run_length - 1 : run_length + 127);
 			out.write((char *)(data + chunkstart), (raw ? run_length * bytespp : bytespp));
 			assert(out.good());
+		}
+	}
+
+	void load_rle_data(std::ifstream &in) {
+		unsigned long pixelcount = width * height;
+		unsigned long currentpixel = 0;
+		unsigned long currentbyte = 0;
+		TGAColor colorbuffer(bytespp);
+		do {
+			unsigned char chunkheader = 0;
+			chunkheader = in.get();
+			if (chunkheader<128) {
+				chunkheader++;
+				for (int i = 0; i<chunkheader; i++) {
+					in.read((char *)colorbuffer.raw, bytespp);
+					for (int t = 0; t<bytespp; t++)
+						data[currentbyte++] = colorbuffer.raw[t];
+					currentpixel++;
+					assert(currentpixel <= pixelcount);
+				}
+			}
+			else {
+				chunkheader -= 127;
+				in.read((char *)colorbuffer.raw, bytespp);
+				for (int i = 0; i<chunkheader; i++) {
+					for (int t = 0; t<bytespp; t++)
+						data[currentbyte++] = colorbuffer.raw[t];
+					currentpixel++;
+				}
+			}
+		} while (currentpixel < pixelcount);
+		assert(in.good());
+	}
+
+	void flip_horizontally() {
+		if (!data) return;
+		int half = width >> 1;
+		for (int i = 0; i<half; i++) {
+			for (int j = 0; j<height; j++) {
+				TGAColor c1 = get(i, j);
+				TGAColor c2 = get(width - 1 - i, j);
+				set(i, j, c2);
+				set(width - 1 - i, j, c1);
+			}
 		}
 	}
 
