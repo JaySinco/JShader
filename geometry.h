@@ -14,7 +14,8 @@ struct Vec2 {
 	Vec2(T _u, T _v) : u(_u), v(_v) {}
 	Vec2<T> operator+(const Vec2<T> &r) const { return Vec2<T>(u + r.u, v + r.v); }
 	Vec2<T> operator-(const Vec2<T> &r) const { return Vec2<T>(u - r.u, v - r.v); }
-	Vec2<T> operator*(float f)          const { return Vec2<T>(u*f, v*f); }
+	Vec2<T> operator*(float f)          const { return Vec2<T>(T(u*f), T(v*f)); }
+	T&       operator[](size_t n)             { assert(n < 2); return raw[n]; }
 };
 
 template<typename T> std::ostream &operator<<(std::ostream &out, Vec2<T>& v2) {
@@ -31,11 +32,13 @@ struct Vec3 {
 	};
 	Vec3() : x(0), y(0), z(0) {}
 	Vec3(T _x, T _y, T _z) : x(_x), y(_y), z(_z) {}
-	Vec3<T> operator^(const Vec3<T> &r) const { return Vec3<T>(y*r.z - z * r.y, z*r.x - x * r.z, x*r.y - y * r.x); }
+	Vec3<T> operator^(const Vec3<T> &r) const { return Vec3<T>(y*r.z - z * r.y, z*r.x - x * r.z, x*r.y - y*r.x); }
 	Vec3<T> operator+(const Vec3<T> &r) const { return Vec3<T>(x + r.x, y + r.y, z + r.z); }
 	Vec3<T> operator-(const Vec3<T> &r) const { return Vec3<T>(x - r.x, y - r.y, z - r.z); }
 	Vec3<T> operator*(float f)          const { return Vec3<T>(x*f, y*f, z*f); }
 	T       operator*(const Vec3<T> &r) const { return x * r.x + y * r.y + z * r.z; }
+	Vec3<T> cross(const Vec3<T> &r)     const { return Vec3<T>(y*r.z - z * r.y, z*r.x - x * r.z, x*r.y - y * r.x); }
+	T&       operator[](size_t n)             { assert(n < 3); return raw[n]; }
 	float norm() const { return std::sqrt(x*x + y * y + z * z); }
 	Vec3<T> &normalize(T n = 1) { *this = (*this)*(n / norm()); return *this; }
 };

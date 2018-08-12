@@ -8,9 +8,10 @@
 
 #include "geometry.h"
 
+struct Vertex { Vec3f v, vt, vn; };
 
 struct ObjModel {
-	struct Vertex { Vec3f v, vt, vn; };
+	
 	using Face = std::vector<Vertex>;
 	std::vector<Face> faces;
 

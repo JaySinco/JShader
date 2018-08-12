@@ -82,7 +82,8 @@ public:
 
 	TGAImage() = delete;
 
-	TGAImage(int w, int h, TGAFormat bpp) : data(nullptr), width(w), height(h), bytespp(bpp) {
+	TGAImage(int w, int h, TGAFormat bpp) : data(nullptr), width(w), height(h), bytespp(bpp) 
+	{
 		size_t sz = width * height * bytespp;
 		data = new unsigned char[sz];
 		memset(data, 0, sz);
@@ -95,17 +96,42 @@ public:
 		std::memcpy(data, rhs.data, sz);
 	}
 
-	TGAImage &operator=(const TGAImage &) = delete;
+	TGAImage &operator=(const TGAImage &rhs)
+	{
+		if (this != &rhs) {
+			if (data) delete[] data;
+			width = rhs.width;
+			height = rhs.height;
+			bytespp = rhs.bytespp;
+			size_t sz = width * height * bytespp;
+			data = new unsigned char[sz];
+			std::memcpy(data, rhs.data, sz);
+		}
+		return *this;
+	};
 
-	TGAColor get(int x, int y) {
+	int get_width() const
+	{
+		return width;
+	}
+
+	int get_height() const
+	{
+		return height;
+	}
+
+	TGAColor get(int x, int y) const 
+	{
 		assert(data && x >= 0 && y >= 0 && x < width && y < height);
 		TGAColor c(bytespp);
 		std::memcpy(&c.val, data + (x + y * width)*bytespp, bytespp);
 		return c;
 	}
 
-	void set(int x, int y, TGAColor c) {
-		if(!(data && x >= 0 && y >= 0 && x < width && y < height && c.bytespp == bytespp)) return;
+	void set(int x, int y, TGAColor c) 
+	{
+		assert(c.bytespp == bytespp);
+		if(!(data && x >= 0 && y >= 0 && x < width && y < height)) return;
 		std::memcpy(data + (x + y * width)*bytespp, &c.val, bytespp);
 	}
 
