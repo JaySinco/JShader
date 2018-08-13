@@ -72,6 +72,15 @@ struct TGAColor
 			i = unsigned char(i*rate);
 		return temp;
 	}
+
+	TGAColor operator+(const TGAColor rhs) const
+	{
+		assert(bytespp == rhs.bytespp);
+		TGAColor temp = *this;
+		for (int i = 0; i < int(bytespp); ++i)
+			temp.raw[i] += rhs.raw[i];
+		return temp;
+	}
 };
 
 

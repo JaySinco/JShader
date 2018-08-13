@@ -8,7 +8,6 @@
 #include "geometry.h"
 
 
-
 void draw_line(Vec2i v1, Vec2i v2, TGAImage &image, TGAColor color)
 {
 	int x1 = v1.x, y1 = v1.y;
@@ -19,7 +18,7 @@ void draw_line(Vec2i v1, Vec2i v2, TGAImage &image, TGAColor color)
 		std::swap(x2, y2);
 		steep = true;
 	}
-	if (x1 > x2) { 
+	if (x1 > x2) {
 		std::swap(x1, x2);
 		std::swap(y1, y2);
 	}
@@ -44,7 +43,7 @@ Vec3f barycentric(Vec2i A, Vec2i B, Vec2i C, Vec2i P)
 	return Vec3f(1.0f - (z.u + z.v) / z.w, z.u / z.w, z.v / z.w);
 }
 
-void draw_triangle(const Vertex vx[3], float *bufferz, TGAImage &image, TGAImage &texture, Vec3f light_dir)
+void draw_triangle(const Vertex vx[3], float *bufferz, TGAImage &image, TGAImage &texture, const Vec3f light_dir)
 {
 	int iw = image.get_width(), ih = image.get_height();
 	int tw = texture.get_width(), th = texture.get_height();
@@ -78,28 +77,33 @@ void draw_triangle(const Vertex vx[3], float *bufferz, TGAImage &image, TGAImage
 	}
 }
 
-int main(int argc, char *argv[])
+void draw_object(const std::string &obj_file, const std::string &texture_file, float *bufferz, const Vec3f light_dir, TGAImage &image)
 {
-	TGAFormat format = TGAFormat::RGB;
-	const int width = 800, height = 800;
-	
-	TGAImage image(width, height, format);
-	TGAImage texture("african_head_diffuse.tga");
-	ObjModel model("african_head.obj");
-
-	float *bufferz = new float[width*height];
-	std::fill(bufferz, bufferz+width*height, -1 * std::numeric_limits<float>::max());
+	ObjModel model(obj_file);
+	TGAImage texture(texture_file);
 
 	for (const auto &face : model.faces) {
 		Vertex vx[3];
 		for (int i = 0; i < 3; ++i)
 			vx[i] = face[i];
-		draw_triangle(vx, bufferz, image, texture, Vec3f(0, 0, -1));
+		draw_triangle(vx, bufferz, image, texture, light_dir);
 	}	
+}
 
+int main(int argc, char *argv[])
+{
+	const int width = 1000, height = 1000;
+	TGAFormat format = TGAFormat::RGB;
+	TGAImage image(width, height, format);
+	float *bufferz = new float[width * height];
+	std::fill(bufferz, bufferz + width * height, -1 * std::numeric_limits<float>::max());
+
+	draw_object("african_head.obj", "african_head_diffuse.tga", bufferz, Vec3f(0, 0, -1.f), image);
+	//draw_object("diablo3_pose.obj", "diablo3_pose_diffuse.tga", bufferz, Vec3f(0, 0, -1.f), image);
+	
+	delete[] bufferz;
 	std::string out_file("output.tga");
 	image.to_file(out_file);
-	delete[] bufferz;
 	assert(std::cerr << "done! rendered into \"" << out_file << "\"(" << width << "x" << height
 		<< "/" << format << ")" << std::endl);
 	getchar();
