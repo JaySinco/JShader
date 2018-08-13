@@ -1,13 +1,13 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <algorithm>
 
 #include "tgaimage.h"
 #include "model.h"
 #include "geometry.h"
 
-TGAFormat format = TGAFormat::RGB;
-const int width = 1000, height = 1000;
+
 
 void draw_line(Vec2i v1, Vec2i v2, TGAImage &image, TGAColor color)
 {
@@ -36,77 +36,67 @@ void draw_line(Vec2i v1, Vec2i v2, TGAImage &image, TGAColor color)
 	}
 }
 
-
-void draw_triangle(Vec3f v1, Vec3f v2, Vec3f v3, Vec3f vt1, Vec3f vt2, Vec3f vt3,
-	float *bufferz, float intensity, TGAImage &image, TGAImage &texture)
+Vec3f barycentric(Vec2i A, Vec2i B, Vec2i C, Vec2i P)
 {
-	if (v1.y == v2.y && v1.y == v3.y) return;
-	if (v1.y > v2.y) std::swap(v1, v2);
-	if (v1.y > v3.y) std::swap(v1, v3);
-	if (v2.y > v3.y) std::swap(v2, v3);
-	auto total_dy = int(v3.y - v1.y);
-	for (int i = 0; i < total_dy; ++i)
+	auto z = Vec3f(float(B.x - A.x), float(C.x - A.x), float(A.x - P.x)) ^ Vec3f(float(B.y - A.y), float(C.y - A.y), float(A.y - P.y));
+	if (std::abs(z.w) < 1) 
+		return Vec3f(-1, 1, 1);
+	return Vec3f(1.0f - (z.u + z.v) / z.w, z.u / z.w, z.v / z.w);
+}
+
+void draw_triangle(const Vertex vx[3], float *bufferz, TGAImage &image, TGAImage &texture, Vec3f light_dir)
+{
+	int iw = image.get_width(), ih = image.get_height();
+	int tw = texture.get_width(), th = texture.get_height();
+	Vec2i A(int((vx[0].v.x + 1)*iw / 2), int((vx[0].v.y + 1)*ih / 2));
+	Vec2i B(int((vx[1].v.x + 1)*iw / 2), int((vx[1].v.y + 1)*ih / 2));
+	Vec2i C(int((vx[2].v.x + 1)*iw / 2), int((vx[2].v.y + 1)*ih / 2));
+	int min_x = std::min({ A.x, B.x, C.x });
+	int min_y = std::min({ A.y, B.y, C.y });
+	int max_x = std::min(std::max({ A.x, B.x, C.x }), iw-1);
+	int max_y = std::min(std::max({ A.y, B.y, C.y }), ih-1);
+	Vec2i P;
+	for (P.x = min_x; P.x <= max_x; ++P.x) 
 	{
-		bool part2 = (i > v2.y - v1.y) || (v2.y == v1.y);
-		auto segment_dy = int(part2 ? (v3.y - v2.y) : (v2.y - v1.y));
-		float alpha = i / float(total_dy);
-		float beta = (i - (part2 ? v2.y - v1.y : 0)) / float(segment_dy);
-		Vec3f A = v1 + (v3 - v1)*alpha;
-		Vec3f B = part2 ? (v2 + (v3 - v2)*beta) : (v1 + (v2 - v1)*beta);
-		if (A.x > B.x) std::swap(A, B);
-		for (auto j = int(A.x); j <= int(B.x); ++j) {
-			float z = (j - A.x) * (B.z - A.z) / (B.x - A.x) + A.z;
-			int x = j;
-			int y = int(v1.y + i);
-			int idx = x + y * width;
-			if (z >= bufferz[idx]) 
-			{
-				bufferz[idx] = z;
-				float x1 = v1.x, x2 = v2.x, x3 = v3.x, y1 = v1.y, y2 = v2.y, y3 = v3.y;
-				float u = (x*(y3 - y1) + x1 * (y - y3) + x3 * (y1 - y)) / (x1*(y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
-			    float v = (-x * y1 + x * y2 + x1 * y - x1 * y2 - x2 * y + x2 * y1) / (-x1 * y2 + x1 * y3 + x2 * y1 - x2 * y3 - x3 * y1 + x3 * y2);
-				float vtx = (1 - u - v) * vt1.x + u * vt2.x + v * vt3.x;
-				float vty = (1 - u - v) * vt1.y + u * vt2.y + v * vt3.y;
-				if (vtx >= 0 && vtx < 1 && vty >= 0 && vty < 1)
-					image.set(x, y, texture.get(int(vtx * texture.get_width()), int(vty * texture.get_height())) * intensity);
-				else
-					image.set(x, y, black);
-			}
+		for (P.y = min_y; P.y <= max_y; ++P.y) 
+		{
+			auto bc = barycentric(A, B, C, P);
+			if (bc.x < 0 || bc.y < 0 || bc.z < 0) 
+				continue;
+			auto z_idx = P.x + P.y * iw;
+			auto z_itp = bc * Vec3f(vx[0].v.z, vx[1].v.z, vx[2].v.z);
+			if (z_itp <= bufferz[z_idx])
+				continue;
+			bufferz[z_idx] = z_itp;
+			auto vn_itp = vx[0].vn * bc.x + vx[1].vn * bc.y + vx[2].vn * bc.z;
+			auto vt_itp = vx[0].vt * bc.x + vx[1].vt * bc.y + vx[2].vt * bc.z;
+			auto text_color = texture.get(int(tw*vt_itp.x), int(th*vt_itp.y));
+			float tensity = vn_itp * light_dir * -1;
+			if (tensity >= 0)
+				image.set(P.x, P.y, text_color * tensity);
 		}
 	}
 }
 
-
-Vec3f world2screen(Vec3f v) {
-	auto x = int((v.x + 1.) * width / 2. );
-	auto y = int((v.y + 1.) * height / 2.);
-	return Vec3f(float(x), float(y), v.z);
-}
-
-
 int main(int argc, char *argv[])
 {
+	TGAFormat format = TGAFormat::RGB;
+	const int width = 800, height = 800;
 	
 	TGAImage image(width, height, format);
 	TGAImage texture("african_head_diffuse.tga");
 	ObjModel model("african_head.obj");
 
-	Vec3f light_dir(0, 0, -1);
 	float *bufferz = new float[width*height];
 	std::fill(bufferz, bufferz+width*height, -1 * std::numeric_limits<float>::max());
 
-	for (const auto &face : model.faces)
-	{
-		Vec3f pv[3];
+	for (const auto &face : model.faces) {
+		Vertex vx[3];
 		for (int i = 0; i < 3; ++i)
-			pv[i] = world2screen(face[i].v);
-		Vec3f n = (face[2].v - face[0].v) ^ (face[1].v - face[0].v);
-		n.normalize();
-		float intensity = n * light_dir;
-		draw_triangle(pv[0], pv[1], pv[2], face[0].vt, face[1].vt, face[2].vt,
-			bufferz, std::abs(intensity), image, texture);
+			vx[i] = face[i];
+		draw_triangle(vx, bufferz, image, texture, Vec3f(0, 0, -1));
+	}	
 
-	}
 	std::string out_file("output.tga");
 	image.to_file(out_file);
 	delete[] bufferz;
