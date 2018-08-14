@@ -71,7 +71,7 @@ void draw_triangle(const Vertex vx[3], float *bufferz, TGAImage &image, TGAImage
 			auto vt_itp = vx[0].vt * bc.x + vx[1].vt * bc.y + vx[2].vt * bc.z;
 			auto text_color = texture.get(int(tw*vt_itp.x), int(th*vt_itp.y));
 			float tensity = vn_itp * light_dir * -1;
-			if (tensity >= 0)
+			if (tensity > 0)
 				image.set(P.x, P.y, text_color * tensity);
 		}
 	}
@@ -98,8 +98,9 @@ int main(int argc, char *argv[])
 	float *bufferz = new float[width * height];
 	std::fill(bufferz, bufferz + width * height, -1 * std::numeric_limits<float>::max());
 
-	draw_object("african_head.obj", "african_head_diffuse.tga", bufferz, Vec3f(0, 0, -1.f), image);
-	//draw_object("diablo3_pose.obj", "diablo3_pose_diffuse.tga", bufferz, Vec3f(0, 0, -1.f), image);
+	image.clear(black);
+	//draw_object("african_head.obj", "african_head_diffuse.tga", bufferz, Vec3f(0, 0, -1.f), image);
+	draw_object("diablo3_pose.obj", "diablo3_pose_diffuse.tga", bufferz, Vec3f(0, 0, -1.f), image);
 	
 	delete[] bufferz;
 	std::string out_file("output.tga");

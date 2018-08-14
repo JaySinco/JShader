@@ -89,6 +89,8 @@ const TGAColor red = TGAColor(255, 0, 0);
 const TGAColor green = TGAColor(0, 255, 0);
 const TGAColor blue = TGAColor(0, 0, 255);
 const TGAColor black = TGAColor(0, 0, 0);
+const TGAColor yellow = TGAColor(247,238, 214);
+const TGAColor gray = TGAColor(144, 144, 144);
 
 inline std::ostream &operator<<(std::ostream &out, const TGAColor &c)
 {
@@ -235,6 +237,13 @@ public:
 		out.write((char *)footer, sizeof(footer));
 		assert(out.good());
 		out.close();
+	}
+
+	void clear(TGAColor c)
+	{
+		for (int i = 0; i < width; ++i)
+			for (int j = 0; j < height; ++j)
+				set(i, j, c);
 	}
 
 	~TGAImage()
